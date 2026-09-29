@@ -13,7 +13,9 @@ RooMultiReal::RooMultiReal(const char *name, const char *title, RooCategory &ind
    RooCategory &cat = dynamic_cast<RooCategory &>(const_cast<RooAbsCategory &>(_index.arg()));
 
    for (int i = 0; i < _models.getSize(); ++i) {
-      cat.defineType(("model" + std::to_string(i)).c_str(), i);
+      if (!cat.hasIndex(i)) {
+         cat.defineType(("model" + std::to_string(i)).c_str(), i);
+      }
    }
 }
 

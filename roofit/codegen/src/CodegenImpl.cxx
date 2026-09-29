@@ -41,6 +41,7 @@
 #include <RooLandau.h>
 #include <RooLognormal.h>
 #include <RooMultiPdf.h>
+#include <RooMultiReal.h>
 #include <RooMultiVarGaussian.h>
 #include <RooONNXFunc.h>
 #include <RooParamHistFunc.h>
@@ -294,6 +295,25 @@ void codegenImpl(RooMultiPdf &arg, CodegenContext &ctx)
       ctx.addResult(&arg, expr);
       std::cout << "Ternary expression call used \n";
    }
+}
+
+void codegenImpl(RooMultiReal &arg, CodegenContext &ctx)
+{
+   int numModels = arg.getNumModels();
+   std::string indexExpr = ctx.getResult(arg.indexCategory());
+   std::string expr;
+
+   for (int i = 0; i < numModels; ++i) {
+      RooAbsReal *model = static_cast<RooAbsReal *>(arg.getModelList().at(i));
+      std::string modelExpr = ctx.getResult(*model);
+
+      expr += "(" + indexExpr + " == " + std::to_string(i) + " ? (" + modelExpr + ") : ";
+   }
+
+   expr += "0.0";
+   expr += std::string(numModels, ')');
+
+   ctx.addResult(&arg, expr);
 }
 
 void codegenImpl(RooSimultaneous &arg, CodegenContext &ctx)

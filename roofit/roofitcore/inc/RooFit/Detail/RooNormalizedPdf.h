@@ -49,6 +49,10 @@ public:
    bool selfNormalized() const override { return true; }
 
    inline double getCorrection() const override { return _pdf->getCorrection(); }
+   inline std::unique_ptr<RooAbsReal> createPenalty(const char *name = nullptr) const override
+   {
+      return _pdf->createPenalty(name);
+   }
 
    bool forceAnalyticalInt(const RooAbsArg & /*dep*/) const override { return true; }
    /// Forward determination of analytical integration capabilities to input p.d.f

@@ -186,6 +186,75 @@ TEST(RooMultiPdfTest, PenaltyTermIsAppliedCorrectly)
    EXPECT_NEAR(delta, expected_penalty, 1e-6) << "Penalty term not correctly applied.";
 }
 
+// Test that the penalty term is dynamically evaluated at runtime when switching
+// between PDFs with different numbers of free parameters (GitHub issue #23454).
+TEST(RooMultiPdfTest, DynamicPenaltyTermAcrossIndices)
+{
+   using namespace RooFit;
+
+   for (std::string backendStr : {"cpu", "codegen"}) {
+      SCOPED_TRACE("Testing backend: " + backendStr);
+      const EvalBackend backend{backendStr.c_str()};
+
+      RooRealVar x("x", "x", -10, 10);
+
+      // gaus1: 2 floating parameters (mean, sigma) + observable = 3 parameters (penalty = 1.5)
+      RooRealVar mean1("mean1", "mean1", 0, -5, 5);
+      RooRealVar sigma1("sigma1", "sigma1", 4, 0.1, 10);
+      RooGaussian gaus1("gaus1", "gaus1", x, mean1, sigma1);
+
+      // gaus2: 1 floating parameter (sigma) + observable = 2 parameters (penalty = 1.0)
+      RooRealVar mean2("mean2", "mean2", 0);
+      RooRealVar sigma2("sigma2", "sigma2", 4, 0.1, 10);
+      RooGaussian gaus2("gaus2", "gaus2", x, mean2, sigma2);
+
+      // gaus3: 0 floating parameters + observable = 1 parameter (penalty = 0.5)
+      RooRealVar mean3("mean3", "mean3", 0);
+      RooRealVar sigma3("sigma3", "sigma3", 4);
+      RooGaussian gaus3("gaus3", "gaus3", x, mean3, sigma3);
+
+      RooCategory index("index", "index");
+      index.setConstant();
+
+      RooArgList pdfList(gaus1, gaus2, gaus3);
+      RooMultiPdf multiPdf("multiPdf", "multiPdf", index, pdfList);
+
+      std::unique_ptr<RooDataSet> data{gaus1.generate(x, 200)};
+
+      // Create NLL once with index 0
+      index.setIndex(0);
+      std::unique_ptr<RooAbsReal> nll_multi{multiPdf.createNLL(*data, backend)};
+
+      std::unique_ptr<RooAbsReal> nll_gaus1{gaus1.createNLL(*data, backend)};
+      std::unique_ptr<RooAbsReal> nll_gaus2{gaus2.createNLL(*data, backend)};
+      std::unique_ptr<RooAbsReal> nll_gaus3{gaus3.createNLL(*data, backend)};
+
+      const double exp_pen0 = 0.5 * countFloatingParametersIncludingObservable(gaus1); // 1.5
+      const double exp_pen1 = 0.5 * countFloatingParametersIncludingObservable(gaus2); // 1.0
+      const double exp_pen2 = 0.5 * countFloatingParametersIncludingObservable(gaus3); // 0.5
+
+      EXPECT_DOUBLE_EQ(exp_pen0, 1.5);
+      EXPECT_DOUBLE_EQ(exp_pen1, 1.0);
+      EXPECT_DOUBLE_EQ(exp_pen2, 0.5);
+
+      // Check index 0
+      index.setIndex(0);
+      EXPECT_NEAR(nll_multi->getVal() - nll_gaus1->getVal(), exp_pen0, 1e-6);
+
+      // Switch to index 1 WITHOUT recreating NLL
+      index.setIndex(1);
+      EXPECT_NEAR(nll_multi->getVal() - nll_gaus2->getVal(), exp_pen1, 1e-6);
+
+      // Switch to index 2 WITHOUT recreating NLL
+      index.setIndex(2);
+      EXPECT_NEAR(nll_multi->getVal() - nll_gaus3->getVal(), exp_pen2, 1e-6);
+
+      // Switch back to index 0
+      index.setIndex(0);
+      EXPECT_NEAR(nll_multi->getVal() - nll_gaus1->getVal(), exp_pen0, 1e-6);
+   }
+}
+
 // Test that the minimizer can correctly work even with disconnected floating
 // parameters (it is expected to temporarily freeze them during the
 // minimization).

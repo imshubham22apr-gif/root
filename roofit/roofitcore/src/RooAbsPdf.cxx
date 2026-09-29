@@ -166,6 +166,7 @@ called for each data event.
 #include "RooFitImplHelpers.h"
 #include "RooHelpers.h"
 #include "RooFormulaVar.h"
+#include "RooConstVar.h"
 #include "RooDerivative.h"
 
 #include "ROOT/StringUtils.hxx"
@@ -613,6 +614,21 @@ double RooAbsPdf::getLogVal(const RooArgSet* nset) const
 double RooAbsPdf::getCorrection() const
 {
    return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// Creates a penalty term to be added to the negative log-likelihood.
+/// By default, if getCorrection() returns a value > 0, wraps it in a RooConstVar.
+/// Subclasses with dynamic penalties (such as RooMultiPdf) can override this
+/// to return a dynamic RooAbsReal term.
+std::unique_ptr<RooAbsReal> RooAbsPdf::createPenalty(const char *name) const
+{
+   const double c = getCorrection();
+   if (c > 0) {
+      std::string penaltyName = name ? name : std::string(GetName()) + "_Penalty";
+      return std::make_unique<RooConstVar>(penaltyName.c_str(), "Penalty term from getCorrection()", c);
+   }
+   return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

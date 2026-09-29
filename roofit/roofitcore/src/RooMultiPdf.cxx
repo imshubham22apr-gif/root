@@ -20,6 +20,7 @@
    by setting their associated indices.*/
 
 #include <RooMultiPdf.h>
+#include <RooMultiReal.h>
 #include <RooFit/Detail/MathFuncs.h>
 #include <RooConstVar.h>
 
@@ -87,4 +88,43 @@ void RooMultiPdf::getParametersHook(const RooArgSet *nset, RooArgSet *list, bool
    list->removeAll();
    getCurrentPdf()->getParameters(nset, *list, stripDisconnected);
    list->add(*x);
+}
+
+std::unique_ptr<RooAbsReal> RooMultiPdf::createPenalty(const char *name) const
+{
+   if (cFactor <= 0) {
+      return nullptr;
+   }
+   bool hasNonZero = false;
+   for (std::size_t i = 0; i < corr.size(); ++i) {
+      if (static_cast<RooAbsReal *>(corr.at(i))->getVal() > 0) {
+         hasNonZero = true;
+         break;
+      }
+   }
+   if (!hasNonZero) {
+      return nullptr;
+   }
+
+   std::string penaltyName = name ? name : std::string(GetName()) + "_Penalty";
+   auto &cat = const_cast<RooCategory &>(dynamic_cast<RooCategory const &>(x.arg()));
+
+   RooArgList penaltyList;
+   std::vector<std::unique_ptr<RooAbsArg>> ownedModels;
+   ownedModels.reserve(corr.size());
+
+   for (std::size_t i = 0; i < corr.size(); ++i) {
+      double val = cFactor * static_cast<RooAbsReal *>(corr.at(i))->getVal();
+      std::string modelName = penaltyName + "_" + std::to_string(i);
+      auto constVar = std::make_unique<RooConstVar>(modelName.c_str(), "Penalty value", val);
+      penaltyList.add(*constVar);
+      ownedModels.push_back(std::move(constVar));
+   }
+
+   auto multiReal = std::make_unique<RooMultiReal>(penaltyName.c_str(), "Penalty term from RooMultiPdf", cat, penaltyList);
+   for (auto &model : ownedModels) {
+      multiReal->addOwnedComponents(std::move(model));
+   }
+
+   return multiReal;
 }
